@@ -1,6 +1,7 @@
 // Main entry point — app initialization, routing, event handling
 import './style.css';
-import { loadTrades, saveTrades, loadStrategies, exportAll, importAll } from './storage.js';
+import { loadTrades, saveTrades, loadStrategies, exportAll, importAll, syncToCloud, syncFromCloud, setCurrentUser } from './storage.js';
+import { loginWithGoogle, logout, onAuth } from './firebase.js';
 import { mergeTrades, migrateTrades, autoMergeTrades, recalcLegsPnl, computeFromLegs } from './csvParser.js';
 import { equityCurve, dailyPnl, pnlByCoin, pnlByStrategy, maeMfeData } from './analytics.js';
 import { renderDashboard } from './components/dashboard.js';
@@ -15,8 +16,22 @@ import { renderCalendar } from './components/calendar.js';
 
 // --- App State ---
 let trades = autoMergeTrades(migrateTrades(loadTrades()));
-saveTrades(trades); // persist any migration/merge changes
+saveTrades(trades);
 let currentPage = 'dashboard';
+
+// --- Sync helper: saves locally + syncs to cloud ---
+async function saveAndSync(t) {
+    saveTrades(t);
+    const status = document.getElementById('sync-status');
+    if (status) status.textContent = '☁️ Syncing...';
+    try {
+        await syncToCloud();
+        if (status) status.textContent = '☁️ Synced';
+    } catch (e) {
+        console.warn('Cloud sync failed:', e);
+        if (status) status.textContent = '⚠️ Offline';
+    }
+}
 
 // --- DOM Elements ---
 const mainContent = document.getElementById('main-content');
@@ -75,19 +90,19 @@ function handleEditTrade(trade) {
         // onUpdate
         (tradeId, updatedData) => {
             trades = trades.map(t => t.id === tradeId ? { ...t, ...updatedData } : t);
-            saveTrades(trades);
+            saveAndSync(trades);
         },
         // onDelete
         (tradeId) => {
             trades = trades.filter(t => t.id !== tradeId);
-            saveTrades(trades);
+            saveAndSync(trades);
         }
     );
 }
 
 function handleImportCSV(newTrades) {
     trades = mergeTrades(trades, newTrades);
-    saveTrades(trades);
+    saveAndSync(trades);
     renderCurrentPage();
 }
 
@@ -112,7 +127,7 @@ function handleAddManualTrade(newTrade) {
     } else {
         trades.push(newTrade);
     }
-    saveTrades(trades);
+    saveAndSync(trades);
     renderCurrentPage();
 }
 
@@ -138,7 +153,7 @@ document.getElementById('btn-export-data').addEventListener('click', async () =>
         URL.revokeObjectURL(url);
     } catch (err) {
         console.error('Export failed:', err);
-        alert('Eroare la export: ' + err.message);
+        alert('Export error: ' + err.message);
     }
 });
 
@@ -155,10 +170,10 @@ document.getElementById('btn-import-data').addEventListener('click', () => {
             await importAll(data);
             trades = loadTrades();
             renderCurrentPage();
-            alert(`✅ Backup importat cu succes! (${data.trades?.length || 0} trade-uri)`);
+            alert(`✅ Backup imported! (${data.trades?.length || 0} trades)`);
         } catch (err) {
             console.error('Import failed:', err);
-            alert('Eroare la import: ' + err.message);
+            alert('Import error: ' + err.message);
         }
     });
     input.click();
@@ -202,6 +217,56 @@ document.querySelectorAll('.nav-link').forEach(link => {
 // Close sidebar on action buttons
 ['btn-import-csv', 'btn-add-trade', 'btn-export-data', 'btn-import-data'].forEach(id => {
     document.getElementById(id)?.addEventListener('click', closeSidebar);
+});
+
+// --- Auth Flow ---
+const authLoggedOut = document.getElementById('auth-logged-out');
+const authLoggedIn = document.getElementById('auth-logged-in');
+const authAvatar = document.getElementById('auth-avatar');
+const authName = document.getElementById('auth-name');
+
+document.getElementById('btn-google-login').addEventListener('click', async () => {
+    try {
+        await loginWithGoogle();
+    } catch (err) {
+        if (err.code !== 'auth/popup-closed-by-user') {
+            console.error('Login failed:', err);
+            alert('Login failed: ' + err.message);
+        }
+    }
+});
+
+document.getElementById('btn-logout').addEventListener('click', async () => {
+    await logout();
+});
+
+onAuth(async (user) => {
+    if (user) {
+        // Logged in
+        setCurrentUser(user.uid);
+        authLoggedOut.classList.add('hidden');
+        authLoggedIn.classList.remove('hidden');
+        authAvatar.src = user.photoURL || '';
+        authName.textContent = user.displayName || user.email;
+
+        // Sync from cloud
+        const syncStatus = document.getElementById('sync-status');
+        syncStatus.textContent = '☁️ Loading...';
+        const hasCloudData = await syncFromCloud();
+        if (hasCloudData) {
+            trades = autoMergeTrades(migrateTrades(loadTrades()));
+            renderCurrentPage();
+        } else {
+            // First time: push local data to cloud
+            await syncToCloud();
+        }
+        syncStatus.textContent = '☁️ Synced';
+    } else {
+        // Logged out
+        setCurrentUser(null);
+        authLoggedOut.classList.remove('hidden');
+        authLoggedIn.classList.add('hidden');
+    }
 });
 
 // --- Init ---

@@ -10,7 +10,11 @@
   },
   "dependencies": {
     "chart.js": "^4.4.0",
+    "firebase": "^12.9.0",
     "papaparse": "^5.4.0",
     "vite": "^6.0.0"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
   }
 }

@@ -1,10 +1,22 @@
-// Storage module — localStorage for trades/settings, IndexedDB for images
+// Storage module — hybrid: localStorage (offline) + Firestore (logged in)
+import { saveUserData, loadUserData } from './firebase.js';
+
 const TRADES_KEY = 'cj_trades';
 const STRATEGIES_KEY = 'cj_strategies';
 const TAGS_KEY = 'cj_tags';
 const DB_NAME = 'CryptoJournalDB';
 const DB_VERSION = 1;
 const IMG_STORE = 'images';
+
+let _currentUid = null;
+
+export function setCurrentUser(uid) {
+    _currentUid = uid;
+}
+
+export function getCurrentUser() {
+    return _currentUid;
+}
 
 // --- localStorage helpers ---
 export function saveTrades(trades) {
@@ -50,6 +62,26 @@ export function loadTags() {
     } catch {
         return [];
     }
+}
+
+// --- Cloud sync ---
+export async function syncToCloud() {
+    if (!_currentUid) return;
+    const trades = loadTrades();
+    const strategies = loadStrategies();
+    const tags = loadTags();
+    // Note: images stay in IndexedDB (too large for Firestore doc)
+    await saveUserData(_currentUid, { trades, strategies, tags, lastSync: new Date().toISOString() });
+}
+
+export async function syncFromCloud() {
+    if (!_currentUid) return false;
+    const data = await loadUserData(_currentUid);
+    if (!data) return false;
+    if (data.trades) saveTrades(data.trades);
+    if (data.strategies) saveStrategies(data.strategies);
+    if (data.tags) saveTags(data.tags);
+    return true;
 }
 
 // --- IndexedDB for images ---
@@ -131,4 +163,6 @@ export async function importAll(data) {
             await saveImage(img.id, img.dataUrl);
         }
     }
+    // Auto-sync to cloud after import
+    await syncToCloud();
 }

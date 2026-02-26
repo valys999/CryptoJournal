@@ -43,6 +43,30 @@
           </a></li>
       </ul>
       <div class="sidebar-footer">
+        <!-- Auth section -->
+        <div id="auth-section"
+          style="margin-bottom:0.75rem; padding:0.5rem 0; border-bottom:1px solid var(--border-subtle);">
+          <div id="auth-logged-out">
+            <button id="btn-google-login" class="btn btn-block"
+              style="background:linear-gradient(135deg,#4285f4,#34a853); color:#fff; font-weight:600; display:flex; align-items:center; justify-content:center; gap:0.5rem;">
+              <span style="font-size:1.1rem;">G</span> Sign in with Google
+            </button>
+          </div>
+          <div id="auth-logged-in" class="hidden">
+            <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem;">
+              <img id="auth-avatar" src="" style="width:28px; height:28px; border-radius:50%;" />
+              <span id="auth-name"
+                style="font-size:0.8rem; font-weight:600; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;"></span>
+            </div>
+            <div style="display:flex; gap:0.4rem;">
+              <span id="sync-status"
+                style="font-size:0.7rem; color:var(--text-muted); flex:1; display:flex; align-items:center;">☁️
+                Synced</span>
+              <button id="btn-logout" class="btn btn-ghost btn-sm"
+                style="font-size:0.7rem; padding:0.15rem 0.5rem;">Logout</button>
+            </div>
+          </div>
+        </div>
         <button id="btn-import-csv" class="btn btn-primary btn-block">
           <span>📥</span> Import CSV
         </button>

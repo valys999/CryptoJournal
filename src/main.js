@@ -261,15 +261,21 @@ onAuth(async (user) => {
         // Sync from cloud
         const syncStatus = document.getElementById('sync-status');
         syncStatus.textContent = '☁️ Loading...';
-        const hasCloudData = await syncFromCloud();
-        if (hasCloudData) {
-            trades = autoMergeTrades(migrateTrades(loadTrades()));
-            renderCurrentPage();
-        } else {
-            // First time: push local data to cloud
-            await syncToCloud();
+        try {
+            const hasCloudData = await syncFromCloud();
+            if (hasCloudData) {
+                trades = autoMergeTrades(migrateTrades(loadTrades()));
+                renderCurrentPage();
+                syncStatus.textContent = `☁️ ${trades.length} trades synced`;
+            } else {
+                // First time: push local data to cloud
+                await syncToCloud();
+                syncStatus.textContent = `☁️ ${trades.length} trades synced`;
+            }
+        } catch (err) {
+            console.error('[SYNC] Error:', err);
+            syncStatus.textContent = '⚠️ Sync error';
         }
-        syncStatus.textContent = '☁️ Synced';
     } else {
         // Logged out — clear local data & reset
         setCurrentUser(null);

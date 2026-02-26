@@ -71,13 +71,17 @@ export async function syncToCloud() {
     const strategies = loadStrategies();
     const tags = loadTags();
     // Note: images stay in IndexedDB (too large for Firestore doc)
+    console.log(`[SYNC] Uploading to cloud: ${trades.length} trades, ${strategies.length} strategies, ${tags.length} tags`);
     await saveUserData(_currentUid, { trades, strategies, tags, lastSync: new Date().toISOString() });
+    console.log('[SYNC] Upload complete');
 }
 
 export async function syncFromCloud() {
-    if (!_currentUid) return false;
+    if (!_currentUid) { console.log('[SYNC] No user, skipping download'); return false; }
+    console.log('[SYNC] Downloading from cloud for uid:', _currentUid);
     const data = await loadUserData(_currentUid);
-    if (!data) return false;
+    if (!data) { console.log('[SYNC] No cloud data found'); return false; }
+    console.log(`[SYNC] Cloud data found: ${(data.trades || []).length} trades, lastSync: ${data.lastSync}`);
     if (data.trades) saveTrades(data.trades);
     if (data.strategies) saveStrategies(data.strategies);
     if (data.tags) saveTags(data.tags);

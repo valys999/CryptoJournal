@@ -1,6 +1,6 @@
 // Main entry point — app initialization, routing, event handling
 import './style.css';
-import { loadTrades, saveTrades, loadStrategies, exportAll, importAll, syncToCloud, syncFromCloud, setCurrentUser } from './storage.js';
+import { loadTrades, saveTrades, loadStrategies, exportAll, importAll, syncToCloud, syncFromCloud, setCurrentUser, getCurrentUser } from './storage.js';
 import { loginWithGoogle, logout, onAuth } from './firebase.js';
 import { mergeTrades, migrateTrades, autoMergeTrades, recalcLegsPnl, computeFromLegs } from './csvParser.js';
 import { equityCurve, dailyPnl, pnlByCoin, pnlByStrategy, maeMfeData } from './analytics.js';

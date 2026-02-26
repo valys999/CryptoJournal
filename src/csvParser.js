@@ -199,7 +199,8 @@ export function computeFromLegs(legs) {
 }
 
 /**
- * Recalculate exit leg P&L based on direction and avg entry price
+ * Recalculate exit leg P&L based on direction and avg entry price.
+ * Includes proportional entry fees in the P&L calculation.
  */
 export function recalcLegsPnl(legs, direction) {
     if (!legs) return legs;
@@ -209,11 +210,18 @@ export function recalcLegsPnl(legs, direction) {
         ? entries.reduce((s, l) => s + l.price * l.size, 0) / totalEntrySize
         : 0;
 
+    // Total entry fees to distribute proportionally across exits
+    const totalEntryFee = entries.reduce((s, l) => s + (l.fee || 0), 0);
+
     return legs.map(l => {
         if (l.type !== 'exit') return l;
+        // Proportional share of entry fees for this exit
+        const entryFeeShare = totalEntrySize > 0
+            ? totalEntryFee * (l.size / totalEntrySize)
+            : 0;
         const pnl = direction === 'Long'
-            ? (l.price - avgEntry) * l.size - (l.fee || 0)
-            : (avgEntry - l.price) * l.size - (l.fee || 0);
+            ? (l.price - avgEntry) * l.size - (l.fee || 0) - entryFeeShare
+            : (avgEntry - l.price) * l.size - (l.fee || 0) - entryFeeShare;
         return { ...l, pnl };
     });
 }

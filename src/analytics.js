@@ -10,7 +10,9 @@ export function computeOverallStats(trades) {
 
     const totalPnl = closingTrades.reduce((s, t) => s + t.closedPnl, 0);
     const totalFees = trades.reduce((s, t) => s + Math.abs(t.fee), 0);
-    const netPnl = totalPnl - totalFees;
+    // closedPnl already includes fee deductions from recalcLegsPnl,
+    // so totalPnl IS the net P&L — no need to subtract fees again.
+    const netPnl = totalPnl;
 
     const avgWin = wins.length ? wins.reduce((s, t) => s + t.closedPnl, 0) / wins.length : 0;
     const avgLoss = losses.length ? Math.abs(losses.reduce((s, t) => s + t.closedPnl, 0) / losses.length) : 0;

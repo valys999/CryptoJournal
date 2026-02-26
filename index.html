@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CryptoJournal — Trading Journal for Hyperliquid</title>
+  <meta name="description"
+    content="Crypto trading journal based on Hyperliquid CSV exports. Analyze your trades, strategies and performance." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+
+<body>
+  <div id="app">
+    <!-- Mobile hamburger -->
+    <button id="hamburger" class="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar" class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">📊</div>
+        <h1 class="brand-title">CryptoJournal</h1>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#" class="nav-link active" data-page="dashboard" id="nav-dashboard">
+            <span class="nav-icon">🏠</span><span class="nav-text">Dashboard</span>
+          </a></li>
+        <li><a href="#" class="nav-link" data-page="trades" id="nav-trades">
+            <span class="nav-icon">📋</span><span class="nav-text">Trades</span>
+          </a></li>
+        <li><a href="#" class="nav-link" data-page="insights" id="nav-insights">
+            <span class="nav-icon">🔍</span><span class="nav-text">Insights</span>
+          </a></li>
+        <li><a href="#" class="nav-link" data-page="calendar" id="nav-calendar">
+            <span class="nav-icon">📅</span><span class="nav-text">Calendar</span>
+          </a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <button id="btn-import-csv" class="btn btn-primary btn-block">
+          <span>📥</span> Import CSV
+        </button>
+        <button id="btn-add-trade" class="btn btn-secondary btn-block">
+          <span>➕</span> Add Trade
+        </button>
+        <button id="btn-export-data" class="btn btn-ghost btn-block">
+          <span>💾</span> Export Backup
+        </button>
+        <button id="btn-import-data" class="btn btn-ghost btn-block">
+          <span>📂</span> Import Backup
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="main-content" class="main-content">
+      <!-- Pages rendered here by JS -->
+    </main>
+  </div>
+
+  <!-- Modals -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div id="modal-container" class="modal-container">
+      <!-- Modal content rendered by JS -->
+    </div>
+  </div>
+
+  <!-- Lightbox for images -->
+  <div id="lightbox" class="lightbox hidden">
+    <button id="lightbox-close" class="lightbox-close">&times;</button>
+    <img id="lightbox-img" class="lightbox-img" src="" alt="Screenshot" />
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

@@ -15,8 +15,7 @@ import { renderInsights } from './components/insights.js';
 import { renderCalendar } from './components/calendar.js';
 
 // --- App State ---
-let trades = autoMergeTrades(migrateTrades(loadTrades()));
-saveTrades(trades);
+let trades = [];
 let currentPage = 'dashboard';
 
 // --- Sync helper: saves locally + syncs to cloud ---
@@ -58,6 +57,16 @@ function navigateTo(page) {
 }
 
 function renderCurrentPage() {
+    if (!getCurrentUser()) {
+        mainContent.innerHTML = `
+        <div class="empty-state" style="margin-top:4rem;">
+          <div class="empty-state-icon" style="font-size:3rem;">🔐</div>
+          <h3 class="empty-state-title">Welcome to CryptoJournal</h3>
+          <p class="empty-state-text">Sign in with Google to access your trading journal.<br>Your data is synced securely in the cloud.</p>
+        </div>
+      `;
+        return;
+    }
     switch (currentPage) {
         case 'dashboard':
             renderDashboard(trades, mainContent);
@@ -262,10 +271,13 @@ onAuth(async (user) => {
         }
         syncStatus.textContent = '☁️ Synced';
     } else {
-        // Logged out
+        // Logged out — clear local data & reset
         setCurrentUser(null);
         authLoggedOut.classList.remove('hidden');
         authLoggedIn.classList.add('hidden');
+        saveTrades([]);
+        trades = [];
+        renderCurrentPage();
     }
 });
 

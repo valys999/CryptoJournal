@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 
 const firebaseConfig = {
     apiKey: "AIzaSyAJMG0ma7PWBytkea1Vj2cwmdSJm42GFkE",
@@ -15,6 +16,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -43,4 +45,31 @@ export async function saveUserData(uid, data) {
 export async function loadUserData(uid) {
     const snap = await getDoc(userDocRef(uid));
     return snap.exists() ? snap.data() : null;
+}
+
+// --- Cloud Storage helpers (abstraction layer) ---
+// To switch to Cloudinary later, replace only these 3 functions
+
+export async function uploadImageCloud(uid, imageId, dataUrl) {
+    const imageRef = ref(storage, `users/${uid}/images/${imageId}`);
+    await uploadString(imageRef, dataUrl, 'data_url');
+    return await getDownloadURL(imageRef);
+}
+
+export async function downloadImageCloud(uid, imageId) {
+    try {
+        const imageRef = ref(storage, `users/${uid}/images/${imageId}`);
+        return await getDownloadURL(imageRef);
+    } catch {
+        return null;
+    }
+}
+
+export async function deleteImageCloud(uid, imageId) {
+    try {
+        const imageRef = ref(storage, `users/${uid}/images/${imageId}`);
+        await deleteObject(imageRef);
+    } catch {
+        // Image may not exist in cloud, ignore
+    }
 }

@@ -1,5 +1,5 @@
 // Storage module — hybrid: localStorage (offline) + Firestore (logged in)
-import { saveUserData, loadUserData } from './firebase.js';
+import { saveUserData, loadUserData, uploadImageCloud, downloadImageCloud, deleteImageCloud } from './firebase.js';
 
 const TRADES_KEY = 'cj_trades';
 const STRATEGIES_KEY = 'cj_strategies';
@@ -110,33 +110,69 @@ function openDB() {
 }
 
 export async function saveImage(id, dataUrl) {
+    // Save locally (IndexedDB cache)
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
         const tx = db.transaction(IMG_STORE, 'readwrite');
         tx.objectStore(IMG_STORE).put({ id, dataUrl });
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });
+    // Also upload to cloud (non-blocking)
+    if (_currentUid) {
+        try {
+            await uploadImageCloud(_currentUid, id, dataUrl);
+            console.log(`[IMG] Uploaded to cloud: ${id}`);
+        } catch (err) {
+            console.warn(`[IMG] Cloud upload failed for ${id}:`, err.message);
+        }
+    }
 }
 
 export async function loadImage(id) {
+    // Try local cache first
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    const localResult = await new Promise((resolve, reject) => {
         const tx = db.transaction(IMG_STORE, 'readonly');
         const req = tx.objectStore(IMG_STORE).get(id);
         req.onsuccess = () => resolve(req.result?.dataUrl || null);
         req.onerror = () => reject(req.error);
     });
+    if (localResult) return localResult;
+
+    // Fall back to cloud
+    if (_currentUid) {
+        try {
+            const cloudUrl = await downloadImageCloud(_currentUid, id);
+            if (cloudUrl) {
+                console.log(`[IMG] Loaded from cloud: ${id}`);
+                return cloudUrl;
+            }
+        } catch (err) {
+            console.warn(`[IMG] Cloud load failed for ${id}:`, err.message);
+        }
+    }
+    return null;
 }
 
 export async function deleteImage(id) {
+    // Delete locally
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
         const tx = db.transaction(IMG_STORE, 'readwrite');
         tx.objectStore(IMG_STORE).delete(id);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });
+    // Also delete from cloud (non-blocking)
+    if (_currentUid) {
+        try {
+            await deleteImageCloud(_currentUid, id);
+            console.log(`[IMG] Deleted from cloud: ${id}`);
+        } catch (err) {
+            console.warn(`[IMG] Cloud delete failed for ${id}:`, err.message);
+        }
+    }
 }
 
 export async function getAllImages() {

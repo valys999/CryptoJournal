@@ -773,12 +773,31 @@ textarea {
 
 @media (max-width: 600px) {
   .detail-grid {
-    gap: 0.6rem;
+    gap: 0.5rem;
   }
 
   .form-row {
     grid-template-columns: 1fr 1fr;
-    gap: 0.6rem;
+    gap: 0.5rem;
+  }
+
+  /* Smaller inputs on mobile */
+  .detail-grid .input,
+  .detail-grid select.input {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.6rem;
+  }
+
+  /* Date/time inputs — prevent overflow */
+  .detail-grid input[type="datetime-local"] {
+    font-size: 0.72rem;
+    padding: 0.45rem 0.4rem;
+  }
+
+  /* Filter bar inputs */
+  .filters-bar .filter-input {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.5rem;
   }
 }
 

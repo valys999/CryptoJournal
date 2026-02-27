@@ -1543,8 +1543,8 @@ textarea {
   /* Filters — compact 2-col grid */
   .filters-bar {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.4rem;
     margin-bottom: 1rem;
   }
 
@@ -1556,13 +1556,18 @@ textarea {
   .filter-group select,
   .filter-group input {
     width: 100% !important;
-    font-size: 14px;
+    font-size: 13px;
+    padding: 0.4rem 0.5rem;
   }
 
-  /* Forms — stack */
+  .filter-label {
+    font-size: 0.65rem;
+  }
+
+  /* Forms — keep 2 col on detail, 1 col elsewhere */
   .form-row {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
   }
 
   .form-row-3 {

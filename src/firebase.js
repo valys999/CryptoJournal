@@ -67,14 +67,8 @@ export async function uploadImageCloud(uid, imageId, dataUrl) {
 }
 
 export async function downloadImageCloud(uid, imageId) {
-    // Cloudinary CDN URL — auto-format and auto-quality for optimal delivery
-    const url = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto/cryptojournal/${uid}/${imageId}`;
-    try {
-        const res = await fetch(url, { method: 'HEAD' });
-        return res.ok ? url : null;
-    } catch {
-        return null;
-    }
+    // Return Cloudinary CDN URL directly — auto-format and auto-quality
+    return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto/cryptojournal/${uid}/${imageId}`;
 }
 
 export async function deleteImageCloud(uid, imageId) {

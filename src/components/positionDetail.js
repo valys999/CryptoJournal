@@ -379,11 +379,12 @@ export function renderPositionDetail(trade, container, onBack, onUpdate, onDelet
 
     for (const imgId of (trade.images || [])) {
       const dataUrl = await loadImage(imgId);
+      const item = document.createElement('div');
+      item.style.cssText = 'position:relative; width:80px; height:80px;';
+
       if (dataUrl) {
         const idx = loadedUrls.length;
         loadedUrls.push(dataUrl);
-        const item = document.createElement('div');
-        item.style.cssText = 'position:relative; width:80px; height:80px;';
         item.innerHTML = `
           <img src="${dataUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:6px; border:1px solid var(--border-subtle); cursor:pointer;" />
           <button class="img-delete-btn" data-img-id="${imgId}" style="position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--color-loss); color:white; border:none; cursor:pointer; font-size:0.65rem; display:flex; align-items:center; justify-content:center;">✕</button>
@@ -391,16 +392,26 @@ export function renderPositionDetail(trade, container, onBack, onUpdate, onDelet
         item.querySelector('img').addEventListener('click', () => {
           if (window.openLightbox) window.openLightbox(loadedUrls, idx);
         });
-        item.querySelector('.img-delete-btn').addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = e.currentTarget.dataset.imgId;
-          await deleteImage(id);
-          trade.images = (trade.images || []).filter(i => i !== id);
-          onUpdate(trade.id, { images: trade.images });
-          render();
-        });
-        gallery.appendChild(item);
+      } else {
+        // Image not available locally (different device/browser)
+        item.innerHTML = `
+          <div style="width:100%; height:100%; border-radius:6px; border:1px dashed var(--border-subtle); display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg-surface); color:var(--text-muted); font-size:0.55rem; text-align:center; gap:2px;">
+            <span style="font-size:1.2rem;">📷</span>
+            <span>Not synced</span>
+          </div>
+          <button class="img-delete-btn" data-img-id="${imgId}" style="position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--color-loss); color:white; border:none; cursor:pointer; font-size:0.65rem; display:flex; align-items:center; justify-content:center;">✕</button>
+        `;
       }
+
+      item.querySelector('.img-delete-btn')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = e.currentTarget.dataset.imgId;
+        await deleteImage(id);
+        trade.images = (trade.images || []).filter(i => i !== id);
+        onUpdate(trade.id, { images: trade.images });
+        render();
+      });
+      gallery.appendChild(item);
     }
 
     // Bind upload

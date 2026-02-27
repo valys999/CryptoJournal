@@ -160,74 +160,7 @@ function createStandaloneTrade(row, isCompleted) {
 }
 
 /**
- * Compute aggregate fields from legs array
- */
-export function computeFromLegs(legs) {
-    if (!legs || legs.length === 0) {
-        return { entryPrice: 0, exitPrice: null, size: 0, remainingSize: 0, notional: 0, fee: 0, closedPnl: 0, status: 'Active' };
-    }
-
-    const entries = legs.filter(l => l.type === 'entry');
-    const exits = legs.filter(l => l.type === 'exit');
-
-    const totalEntrySize = entries.reduce((s, l) => s + l.size, 0);
-    const totalExitSize = exits.reduce((s, l) => s + l.size, 0);
-    const remainingSize = Math.max(0, +(totalEntrySize - totalExitSize).toFixed(8));
-
-    // Weighted average entry price
-    const entryPrice = totalEntrySize > 0
-        ? entries.reduce((s, l) => s + l.price * l.size, 0) / totalEntrySize
-        : 0;
-
-    // Weighted average exit price
-    const exitPrice = totalExitSize > 0
-        ? exits.reduce((s, l) => s + l.price * l.size, 0) / totalExitSize
-        : null;
-
-    const totalFee = legs.reduce((s, l) => s + (l.fee || 0), 0);
-    const notional = entries.reduce((s, l) => s + l.price * l.size, 0);
-
-    // Realized P&L per exit leg (using avg entry price)
-    // For Long: (exitPrice - avgEntry) * exitSize
-    // For Short: (avgEntry - exitPrice) * exitSize
-    // We store per-leg pnl if available, otherwise we'll let the editor compute
-    const closedPnl = exits.reduce((s, l) => s + (l.pnl || 0), 0);
-
-    const status = remainingSize > 0 ? 'Active' : (totalExitSize > 0 ? 'Completed' : 'Active');
-
-    return { entryPrice, exitPrice, size: totalEntrySize, remainingSize, notional, fee: totalFee, closedPnl, status };
-}
-
-/**
- * Recalculate exit leg P&L based on direction and avg entry price.
- * Includes proportional entry fees in the P&L calculation.
- */
-export function recalcLegsPnl(legs, direction) {
-    if (!legs) return legs;
-    const entries = legs.filter(l => l.type === 'entry');
-    const totalEntrySize = entries.reduce((s, l) => s + l.size, 0);
-    const avgEntry = totalEntrySize > 0
-        ? entries.reduce((s, l) => s + l.price * l.size, 0) / totalEntrySize
-        : 0;
-
-    // Total entry fees to distribute proportionally across exits
-    const totalEntryFee = entries.reduce((s, l) => s + (l.fee || 0), 0);
-
-    return legs.map(l => {
-        if (l.type !== 'exit') return l;
-        // Proportional share of entry fees for this exit
-        const entryFeeShare = totalEntrySize > 0
-            ? totalEntryFee * (l.size / totalEntrySize)
-            : 0;
-        const pnl = direction === 'Long'
-            ? (l.price - avgEntry) * l.size - (l.fee || 0) - entryFeeShare
-            : (avgEntry - l.price) * l.size - (l.fee || 0) - entryFeeShare;
-        return { ...l, pnl };
-    });
-}
-
-/**
- * Create a manual trade object with defaults — now with legs
+ * Create a manual trade object with defaults
  */
 export function createManualTrade(data) {
     const entryPrice = parseNum(data.entryPrice);
@@ -236,44 +169,16 @@ export function createManualTrade(data) {
     const fee = parseNum(data.fee);
     const direction = data.direction || 'Long';
 
-    // Annotations go on each leg
-    const legAnnotations = {
-        strategy: data.strategy || '',
-        risk: data.risk || 0,
-        notes: data.notes || '',
-        tags: data.tags || [],
-        images: data.images || [],
-        mae: data.mae != null ? parseNum(data.mae) : null,
-        mfe: data.mfe != null ? parseNum(data.mfe) : null,
-    };
-
-    // Build legs
-    const legs = [];
-    if (entryPrice > 0 && size > 0) {
-        legs.push({
-            type: 'entry',
-            time: data.time || new Date().toISOString(),
-            price: entryPrice,
-            size: size,
-            fee: exitPrice ? 0 : fee,
-            ...legAnnotations,
-        });
+    // Compute P&L
+    let closedPnl = 0;
+    if (exitPrice && entryPrice && size) {
+        closedPnl = direction === 'Long'
+            ? (exitPrice - entryPrice) * size - fee
+            : (entryPrice - exitPrice) * size - fee;
     }
-    if (exitPrice && size > 0) {
-        legs.push({
-            type: 'exit',
-            time: data.exitTime || data.time || new Date().toISOString(),
-            price: exitPrice,
-            size: size,
-            fee: fee,
-            pnl: direction === 'Long'
-                ? (exitPrice - entryPrice) * size - fee
-                : (entryPrice - exitPrice) * size - fee,
-            ...legAnnotations,
-        });
+    if (parseNum(data.closedPnl)) {
+        closedPnl = parseNum(data.closedPnl);
     }
-
-    const computed = computeFromLegs(legs);
 
     return {
         id: 'manual_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -281,16 +186,20 @@ export function createManualTrade(data) {
         exitTime: exitPrice ? (data.exitTime || data.time || new Date().toISOString()) : null,
         coin: (data.coin || '').toUpperCase(),
         direction,
-        legs,
-        ...computed,
-        closedPnl: parseNum(data.closedPnl) || computed.closedPnl,
-        risk: 0,
-        strategy: '',
-        notes: '',
-        tags: [],
-        images: [],
-        mae: null,
-        mfe: null,
+        entryPrice,
+        exitPrice,
+        size,
+        notional: entryPrice * size,
+        fee,
+        closedPnl,
+        status: exitPrice ? 'Completed' : 'Active',
+        risk: data.risk || 0,
+        strategy: data.strategy || '',
+        notes: data.notes || '',
+        tags: data.tags || [],
+        images: data.images || [],
+        mae: data.mae != null ? parseNum(data.mae) : null,
+        mfe: data.mfe != null ? parseNum(data.mfe) : null,
         source: 'manual'
     };
 }
@@ -331,7 +240,7 @@ export function mergeTrades(existing, imported) {
 }
 
 /**
- * Migrate old format trades — adds legs array if missing
+ * Migrate old format trades — strip legs, keep flat fields
  */
 export function migrateTrades(trades) {
     return trades.map(t => {
@@ -346,112 +255,28 @@ export function migrateTrades(trades) {
             };
         }
 
-        // Migrate to legs format
-        if (!t.legs) {
-            const legAnnotations = {
-                strategy: t.strategy || '',
-                risk: t.risk || 0,
-                notes: t.notes || '',
-                tags: t.tags || [],
-                images: t.images || [],
-            };
-            const legs = [];
-            if (t.entryPrice && t.size) {
-                legs.push({
-                    type: 'entry',
-                    time: t.time,
-                    price: t.entryPrice,
-                    size: t.size,
-                    fee: t.exitPrice ? 0 : (t.fee || 0),
-                    ...legAnnotations,
-                });
-            }
-            if (t.exitPrice && t.size) {
-                legs.push({
-                    type: 'exit',
-                    time: t.exitTime || t.time,
-                    price: t.exitPrice,
-                    size: t.size,
-                    fee: t.fee || 0,
-                    pnl: t.closedPnl || 0,
-                    ...legAnnotations,
-                });
-            }
-            t = { ...t, legs };
-            // Recompute from legs
-            const computed = computeFromLegs(legs);
-            t.remainingSize = computed.remainingSize;
-            t.status = computed.status;
+        // If trade has legs, flatten it back to a simple trade
+        if (t.legs && t.legs.length > 0) {
+            const entries = t.legs.filter(l => l.type === 'entry');
+            const exits = t.legs.filter(l => l.type === 'exit');
+
+            // If this was a merged position with multiple entries/exits,
+            // keep the trade's existing flat fields (entryPrice, exitPrice, closedPnl)
+            // They were already computed. Just remove the legs array.
+            t = { ...t };
+            delete t.legs;
+            delete t.remainingSize;
+            delete t._tradeId;
+        }
+
+        // Ensure required fields exist
+        if (t.status === undefined) {
+            t.status = t.exitPrice ? 'Completed' : 'Active';
+        }
+        if (t.notional === undefined) {
+            t.notional = (t.entryPrice || 0) * (t.size || 0);
         }
 
         return t;
     });
-}
-
-/**
- * Auto-merge trades on same coin + direction into single positions with multiple legs.
- * Keeps all annotations (strategy, risk, notes, tags, images) from all merged trades.
- */
-export function autoMergeTrades(trades) {
-    const groups = {};
-
-    trades.forEach(t => {
-        const key = `${t.coin}_${t.direction}`;
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(t);
-    });
-
-    const merged = [];
-    for (const [key, group] of Object.entries(groups)) {
-        if (group.length <= 1) {
-            merged.push(group[0]);
-            continue;
-        }
-
-        // Sort by time (earliest first)
-        group.sort((a, b) => a.time.localeCompare(b.time));
-        const base = group[0];
-
-        // Merge all legs, stamping each with its source trade's annotations
-        const allLegs = [];
-        for (const t of group) {
-            if (t.legs && t.legs.length > 0) {
-                for (const leg of t.legs) {
-                    allLegs.push({
-                        ...leg,
-                        // Carry annotations from the source trade if leg doesn't already have them
-                        strategy: leg.strategy || t.strategy || '',
-                        risk: leg.risk != null ? leg.risk : (t.risk || 0),
-                        notes: leg.notes || t.notes || '',
-                        tags: leg.tags || t.tags || [],
-                        images: leg.images || t.images || [],
-                    });
-                }
-            }
-        }
-
-        // Sort legs by time
-        allLegs.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-
-        // Recalculate P&L on exit legs
-        const finalLegs = recalcLegsPnl(allLegs, base.direction);
-        const computed = computeFromLegs(finalLegs);
-
-        merged.push({
-            ...base,
-            legs: finalLegs,
-            ...computed,
-            exitTime: computed.status === 'Completed' ? (group.at(-1).exitTime || group.at(-1).time) : null,
-            // Position-level annotations: first non-empty
-            strategy: group.map(t => t.strategy).filter(Boolean)[0] || '',
-            risk: Math.max(...group.map(t => t.risk || 0)),
-            notes: '',
-            tags: [...new Set(group.flatMap(t => t.tags || []))],
-            images: [...new Set(group.flatMap(t => t.images || []))],
-            mae: null,
-            mfe: null,
-        });
-    }
-
-    return merged;
 }

@@ -113,65 +113,33 @@ function renderMonth(monthDate, data, maxPnl) {
 function showDayDetail(dateStr, trades, container) {
   // Find trades that had activity on this day
   const dayTrades = trades.filter(t => {
-    // Check position-level time
     if (t.time && t.time.slice(0, 10) === dateStr) return true;
     if (t.exitTime && t.exitTime.slice(0, 10) === dateStr) return true;
-    // Check individual legs
-    if (t.legs) {
-      return t.legs.some(l => l.time && l.time.slice(0, 10) === dateStr);
-    }
     return false;
   });
 
-  // Build per-trade detail with legs on this day
+  // Build per-trade rows
   const rows = [];
   dayTrades.forEach(t => {
-    const legsOnDay = (t.legs || []).filter(l => l.time && l.time.slice(0, 10) === dateStr);
-    if (legsOnDay.length > 0) {
-      legsOnDay.forEach(l => {
-        const dirClass = t.direction === 'Long' ? 'long' : 'short';
-        const pnl = l.type === 'exit' ? (l.pnl || 0) : 0;
-        const pnlClass = pnl > 0 ? 'cell-profit' : pnl < 0 ? 'cell-loss' : '';
-        const time = new Date(l.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        rows.push(`
-                    <tr>
-                        <td>${time}</td>
-                        <td class="cell-coin">${t.coin}</td>
-                        <td><span class="cell-dir ${dirClass}">${t.direction}</span></td>
-                        <td><span class="status-badge ${l.type === 'entry' ? 'status-active' : 'status-completed'}" style="font-size:0.7rem">${l.type === 'entry' ? '📥 Entry' : '📤 Exit'}</span></td>
-                        <td>$${l.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                        <td>${l.size}</td>
-                        <td class="${pnlClass}" style="font-weight:600">${l.type === 'exit' ? formatUSD(pnl) : '<span class="text-muted">—</span>'}</td>
-                        <td>${l.strategy ? `<span class="strategy-badge">${l.strategy}</span>` : ''}</td>
-                    </tr>
-                `);
-      });
-    } else {
-      // Trade matched by position time but no legs — show position summary
-      const pnlClass = t.closedPnl > 0 ? 'cell-profit' : t.closedPnl < 0 ? 'cell-loss' : '';
-      const dirClass = t.direction === 'Long' ? 'long' : 'short';
-      rows.push(`
-                <tr>
-                    <td>${new Date(t.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td class="cell-coin">${t.coin}</td>
-                    <td><span class="cell-dir ${dirClass}">${t.direction}</span></td>
-                    <td>—</td>
-                    <td>$${(t.entryPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                    <td>${t.size}</td>
-                    <td class="${pnlClass}" style="font-weight:600">${t.closedPnl ? formatUSD(t.closedPnl) : '<span class="text-muted">—</span>'}</td>
-                    <td>${t.strategy ? `<span class="strategy-badge">${t.strategy}</span>` : ''}</td>
-                </tr>
-            `);
-    }
+    const pnlClass = t.closedPnl > 0 ? 'cell-profit' : t.closedPnl < 0 ? 'cell-loss' : '';
+    const dirClass = t.direction === 'Long' ? 'long' : 'short';
+    const isCompleted = t.status === 'Completed';
+    rows.push(`
+      <tr>
+        <td>${new Date(t.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
+        <td class="cell-coin">${t.coin}</td>
+        <td><span class="cell-dir ${dirClass}">${t.direction}</span></td>
+        <td><span class="status-badge ${isCompleted ? 'status-completed' : 'status-active'}" style="font-size:0.7rem">${isCompleted ? '✓ Completed' : 'Active'}</span></td>
+        <td>$${(t.entryPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+        <td>${t.size}</td>
+        <td class="${pnlClass}" style="font-weight:600">${isCompleted ? formatUSD(t.closedPnl) : '<span class="text-muted">—</span>'}</td>
+        <td>${t.strategy ? `<span class="strategy-badge">${t.strategy}</span>` : ''}</td>
+      </tr>
+    `);
   });
 
   // Total P&L for the day
-  let totalPnl = 0;
-  dayTrades.forEach(t => {
-    (t.legs || []).filter(l => l.time && l.time.slice(0, 10) === dateStr && l.type === 'exit').forEach(l => {
-      totalPnl += l.pnl || 0;
-    });
-  });
+  const totalPnl = dayTrades.reduce((s, t) => s + (t.closedPnl || 0), 0);
   const totalClass = totalPnl >= 0 ? 'cell-profit' : 'cell-loss';
 
   const niceDate = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -184,7 +152,7 @@ function showDayDetail(dateStr, trades, container) {
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
                 <div>
                     <h3 style="margin:0; font-size:1.1rem;">📅 ${niceDate}</h3>
-                    <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--text-muted);">${rows.length} transactions • Total: <strong class="${totalClass}">${formatUSD(totalPnl)}</strong></p>
+                    <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--text-muted);">${dayTrades.length} trades • Total: <strong class="${totalClass}">${formatUSD(totalPnl)}</strong></p>
                 </div>
                 <button id="day-detail-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-secondary);">✕</button>
             </div>
@@ -194,14 +162,14 @@ function showDayDetail(dateStr, trades, container) {
                         <th>Ora</th>
                         <th>Coin</th>
                         <th>Dir</th>
-                        <th>Type</th>
-                        <th>Price</th>
+                        <th>Status</th>
+                        <th>Entry</th>
                         <th>Size</th>
                         <th>P&L</th>
                         <th>Strategy</th>
                     </tr></thead>
                     <tbody>
-                        ${rows.length > 0 ? rows.join('') : '<tr><td colspan="8" style="text-align:center; padding:1.5rem; color:var(--text-muted)">No transactions</td></tr>'}
+                        ${rows.length > 0 ? rows.join('') : '<tr><td colspan="8" style="text-align:center; padding:1.5rem; color:var(--text-muted)">No trades</td></tr>'}
                     </tbody>
                 </table>
             </div>

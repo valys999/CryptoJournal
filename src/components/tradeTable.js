@@ -74,10 +74,16 @@ export function renderTradeTable(trades, container, onEditTrade) {
             ${tableHeader('size', 'Size')}
             ${tableHeader('fee', 'Fee')}
             ${tableHeader('closedPnl', 'P&L')}
+            ${tableHeader('strategy', 'Strategy')}
+            <th>Tags</th>
+            ${tableHeader('risk', 'Risk')}
+            ${tableHeader('mae', 'MAE%')}
+            ${tableHeader('mfe', 'MFE%')}
+            <th>📷</th>
           </tr>
         </thead>
         <tbody>
-          ${paged.length === 0 ? `<tr><td colspan="9" class="text-center text-muted" style="padding:2rem">No trades found</td></tr>` : ''}
+          ${paged.length === 0 ? `<tr><td colspan="15" class="text-center text-muted" style="padding:2rem">No trades found</td></tr>` : ''}
           ${paged.map(t => tradeRow(t)).join('')}
         </tbody>
       </table>
@@ -108,7 +114,7 @@ function tradeRow(t) {
   const isActive = t.status === 'Active';
   const entryPrice = t.entryPrice || 0;
   const exitPrice = t.exitPrice;
-  const legsCount = (t.legs || []).length;
+  const riskStars = t.risk > 0 ? '★'.repeat(t.risk) + '☆'.repeat(5 - t.risk) : '<span class="text-muted">—</span>';
 
   return `
     <tr data-id="${t.id}" class="${isActive ? 'row-active' : ''} row-clickable">
@@ -121,9 +127,15 @@ function tradeRow(t) {
     }</td>
       <td>$${entryPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
       <td>${exitPrice != null ? '$' + exitPrice.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '<span class="text-muted">—</span>'}</td>
-      <td>${t.remainingSize != null && t.remainingSize !== t.size ? `<span style="color:var(--accent-primary)">${t.remainingSize}</span>/${t.size}` : t.size}</td>
+      <td>${t.size}</td>
       <td class="text-muted">$${Math.abs(t.fee).toFixed(2)}</td>
       <td class="${pnlClass}">${isActive ? '<span class="text-muted">—</span>' : formatUSD(t.closedPnl)}</td>
+      <td>${t.strategy ? `<span class="strategy-badge">${t.strategy}</span>` : ''}</td>
+      <td>${(t.tags || []).length > 0 ? t.tags.map(tag => `<span class="tag-badge">${tag}</span>`).join('') : ''}</td>
+      <td><span class="risk-stars" style="font-size:0.75rem;">${riskStars}</span></td>
+      <td class="text-muted">${t.mae != null ? t.mae + '%' : '—'}</td>
+      <td class="text-muted">${t.mfe != null ? t.mfe + '%' : '—'}</td>
+      <td><div class="image-thumbs" data-trade-id="${t.id}" style="display:flex; gap:3px;">${(t.images || []).length > 0 ? '<span class="text-muted" style="font-size:0.7rem">⏳</span>' : ''}</div></td>
     </tr>
   `;
 }
@@ -229,29 +241,37 @@ async function loadImageThumbnails(container, trades) {
     const thumbsContainer = container.querySelector(`.image-thumbs[data-trade-id="${trade.id}"]`);
     if (!thumbsContainer) continue;
 
-    let thumbsHtml = '';
-    const loadedImages = [];
-    for (const imgId of trade.images.slice(0, 3)) {
+    // Load ALL images for lightbox navigation
+    const allUrls = [];
+    for (const imgId of trade.images) {
       const dataUrl = await loadImage(imgId);
-      if (dataUrl) {
-        loadedImages.push(dataUrl);
-        thumbsHtml += `<img src="${dataUrl}" class="image-thumb" data-full-src="${dataUrl}" alt="Screenshot" />`;
-      }
+      if (dataUrl) allUrls.push(dataUrl);
     }
-    if (trade.images.length > 3) {
-      thumbsHtml += `<span class="text-muted" style="font-size:0.7rem; align-self:center">+${trade.images.length - 3}</span>`;
+
+    // Show only first 2 as thumbnails
+    let thumbsHtml = '';
+    allUrls.slice(0, 2).forEach((url) => {
+      thumbsHtml += `<img src="${url}" class="image-thumb" data-full-src="${url}" alt="Screenshot" />`;
+    });
+    if (allUrls.length > 2) {
+      thumbsHtml += `<span class="image-thumb-more" style="font-size:0.7rem; align-self:center; cursor:pointer; color:var(--text-muted);">+${allUrls.length - 2}</span>`;
     }
     thumbsContainer.innerHTML = thumbsHtml;
 
-    // Bind click for lightbox
-    thumbsContainer.querySelectorAll('.image-thumb').forEach(img => {
+    // Bind click — open lightbox with ALL images
+    thumbsContainer.querySelectorAll('.image-thumb').forEach((img, i) => {
       img.addEventListener('click', (e) => {
         e.stopPropagation();
-        const lightbox = document.getElementById('lightbox');
-        const lightboxImg = document.getElementById('lightbox-img');
-        lightboxImg.src = img.dataset.fullSrc;
-        lightbox.classList.remove('hidden');
+        if (window.openLightbox) window.openLightbox(allUrls, i);
       });
     });
+    // Also make +N badge open lightbox at image 3
+    const moreBtn = thumbsContainer.querySelector('.image-thumb-more');
+    if (moreBtn) {
+      moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.openLightbox) window.openLightbox(allUrls, 2);
+      });
+    }
   }
 }

@@ -720,10 +720,11 @@ textarea:focus {
 select {
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  padding-right: 2rem;
+  padding-right: 2.25rem;
+}
+
+select.input {
+  background: var(--bg-input) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8'%3E%3Cpath d='M6 9L1 3h10z'/%3E%3C/svg%3E") no-repeat right 0.65rem center / 12px 12px;
 }
 
 textarea {
@@ -753,6 +754,32 @@ textarea {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 1rem;
+}
+
+/* Detail page responsive grid */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.detail-grid>* {
+  min-width: 0;
+}
+
+.detail-grid .input {
+  max-width: 100%;
+}
+
+@media (max-width: 600px) {
+  .detail-grid {
+    gap: 0.6rem;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
 }
 
 /* --- Modal --- */
@@ -857,6 +884,48 @@ textarea {
   max-height: 90%;
   border-radius: var(--radius-md);
   object-fit: contain;
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 2.5rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+  z-index: 10;
+  line-height: 1;
+}
+
+.lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.lightbox-prev-btn {
+  left: 1.5rem;
+}
+
+.lightbox-next-btn {
+  right: 1.5rem;
+}
+
+.lightbox-counter {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 /* --- Uploader --- */

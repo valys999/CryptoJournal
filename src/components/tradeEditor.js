@@ -1,19 +1,11 @@
-// Trade Editor Modal — edit ALL fields + annotations, images, MAE/MFE + LEGS
+// Trade Editor Modal — edit all fields of a simple trade
 import { loadStrategies, loadTags, saveImage, loadImage, deleteImage } from '../storage.js';
-import { computeFromLegs, recalcLegsPnl } from '../csvParser.js';
 
 function toLocalDatetime(isoStr) {
   const d = new Date(isoStr);
   const offset = d.getTimezoneOffset();
   const local = new Date(d.getTime() - offset * 60 * 1000);
   return local.toISOString().slice(0, 16);
-}
-
-function fmtDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
-    ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
 function fmtPrice(v) {
@@ -23,102 +15,22 @@ function fmtPrice(v) {
 export function openTradeEditor(trade, modalOverlay, modalContainer, onSave, onDelete) {
   const strategies = loadStrategies();
   const availableTags = loadTags();
-
-  // Initialize legs from trade
-  let currentLegs = JSON.parse(JSON.stringify(trade.legs || []));
   const direction = trade.direction || 'Long';
 
-  function renderLegsSection() {
-    const computed = computeFromLegs(currentLegs);
-    const entries = currentLegs.filter(l => l.type === 'entry');
-    const exits = currentLegs.filter(l => l.type === 'exit');
-
-    return `
-      <div class="legs-section">
-        <div class="legs-summary" style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:0.5rem; margin-bottom:1rem; padding:0.75rem; background:var(--bg-surface); border-radius:var(--radius-md);">
-          <div><span class="form-label" style="display:block;font-size:0.65rem;">AVG ENTRY</span><strong>${fmtPrice(computed.entryPrice)}</strong></div>
-          <div><span class="form-label" style="display:block;font-size:0.65rem;">AVG EXIT</span><strong>${computed.exitPrice ? fmtPrice(computed.exitPrice) : '—'}</strong></div>
-          <div><span class="form-label" style="display:block;font-size:0.65rem;">REMAINING</span><strong>${computed.remainingSize} / ${computed.size}</strong></div>
-          <div><span class="form-label" style="display:block;font-size:0.65rem;">REALIZED P&L</span><strong style="color:${computed.closedPnl >= 0 ? 'var(--color-profit)' : 'var(--color-loss)'}">${computed.closedPnl !== 0 ? (computed.closedPnl > 0 ? '+' : '') + '$' + Math.abs(computed.closedPnl).toFixed(2) : '$0.00'}</strong></div>
-        </div>
-
-        <div style="margin-bottom:0.75rem;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-            <span class="form-label" style="font-size:0.75rem; color:var(--color-profit); font-weight:700;">📥 ENTRIES (${entries.length})</span>
-            <button class="btn btn-sm btn-primary" id="btn-add-entry" style="font-size:0.7rem; padding:0.3rem 0.6rem;">+ Entry</button>
-          </div>
-          <table class="data-table" style="width:100%; font-size:0.8rem;">
-            <thead><tr>
-              <th style="padding:0.4rem">Data</th>
-              <th style="padding:0.4rem">Price</th>
-              <th style="padding:0.4rem">Size</th>
-              <th style="padding:0.4rem">Fee</th>
-              <th style="padding:0.4rem">Strat.</th>
-              <th style="padding:0.4rem">Note</th>
-              <th style="padding:0.4rem"></th>
-            </tr></thead>
-            <tbody>
-              ${entries.length === 0 ? '<tr><td colspan="7" style="padding:0.5rem; text-align:center; color:var(--text-muted)">No entry</td></tr>' : ''}
-              ${entries.map((l, i) => `
-                <tr>
-                  <td style="padding:0.4rem">${fmtDate(l.time)}</td>
-                  <td style="padding:0.4rem">${fmtPrice(l.price)}</td>
-                  <td style="padding:0.4rem">${l.size}</td>
-                  <td style="padding:0.4rem">$${(l.fee || 0).toFixed(2)}</td>
-                  <td style="padding:0.4rem">${l.strategy ? `<span class="strategy-badge">${l.strategy}</span>` : ''}</td>
-                  <td style="padding:0.4rem; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${(l.notes || '').replace(/"/g, '&quot;')}">${l.notes ? '📝' : ''}</td>
-                  <td style="padding:0.4rem"><button class="btn btn-ghost btn-sm leg-remove" data-type="entry" data-idx="${i}" style="font-size:0.7rem;color:var(--color-loss);">✕</button></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-
-        <div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-            <span class="form-label" style="font-size:0.75rem; color:var(--color-loss); font-weight:700;">📤 EXITS (${exits.length})</span>
-            <button class="btn btn-sm btn-primary" id="btn-add-exit" style="font-size:0.7rem; padding:0.3rem 0.6rem;" ${computed.remainingSize <= 0 ? 'disabled' : ''}>+ Exit</button>
-          </div>
-          <table class="data-table" style="width:100%; font-size:0.8rem;">
-            <thead><tr>
-              <th style="padding:0.4rem">Data</th>
-              <th style="padding:0.4rem">Price</th>
-              <th style="padding:0.4rem">Size</th>
-              <th style="padding:0.4rem">Fee</th>
-              <th style="padding:0.4rem">P&L</th>
-              <th style="padding:0.4rem">Strat.</th>
-              <th style="padding:0.4rem">Note</th>
-              <th style="padding:0.4rem"></th>
-            </tr></thead>
-            <tbody>
-              ${exits.length === 0 ? '<tr><td colspan="8" style="padding:0.5rem; text-align:center; color:var(--text-muted)">No exit</td></tr>' : ''}
-              ${exits.map((l, i) => `
-                <tr>
-                  <td style="padding:0.4rem">${fmtDate(l.time)}</td>
-                  <td style="padding:0.4rem">${fmtPrice(l.price)}</td>
-                  <td style="padding:0.4rem">${l.size}</td>
-                  <td style="padding:0.4rem">$${(l.fee || 0).toFixed(2)}</td>
-                  <td style="padding:0.4rem; color:${(l.pnl || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)'}; font-weight:600;">${(l.pnl || 0) >= 0 ? '+' : ''}$${Math.abs(l.pnl || 0).toFixed(2)}</td>
-                  <td style="padding:0.4rem">${l.strategy ? `<span class="strategy-badge">${l.strategy}</span>` : ''}</td>
-                  <td style="padding:0.4rem; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${(l.notes || '').replace(/"/g, '&quot;')}">${l.notes ? '📝' : ''}</td>
-                  <td style="padding:0.4rem"><button class="btn btn-ghost btn-sm leg-remove" data-type="exit" data-idx="${i}" style="font-size:0.7rem;color:var(--color-loss);">✕</button></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
+  // State
+  let currentRisk = trade.risk || 0;
+  let currentTags = [...(trade.tags || [])];
+  let currentImages = [...(trade.images || [])];
+  let newImageFiles = [];
 
   function renderEditor() {
-    const computed = computeFromLegs(currentLegs);
+    const isActive = trade.status === 'Active';
 
     modalContainer.innerHTML = `
     <div class="modal-header">
       <h3 class="modal-title">✏️ Edit — ${trade.coin} ${trade.direction}
-        <span class="status-badge ${computed.status === 'Active' ? 'status-active' : 'status-completed'}" style="margin-left:0.5rem; font-size:0.7rem;">
-          ${computed.status === 'Active' ? '<span class="status-dot"></span> Active' : '✓ Completed'}
+        <span class="status-badge ${isActive ? 'status-active' : 'status-completed'}" style="margin-left:0.5rem; font-size:0.7rem;">
+          ${isActive ? '<span class="status-dot"></span> Active' : '✓ Completed'}
         </span>
       </h3>
       <button class="modal-close" id="modal-close">&times;</button>
@@ -145,10 +57,37 @@ export function openTradeEditor(trade, modalOverlay, modalContainer, onSave, onD
 
       <hr style="border-color: var(--border-subtle); margin: 1rem 0;" />
 
-      <!-- LEGS Section -->
-      <h4 style="margin:0 0 0.75rem; font-size:0.9rem;">📊 Legs (Entries & Exits)</h4>
-      <div id="legs-container">
-        ${renderLegsSection()}
+      <!-- Trade Data -->
+      <h4 style="margin:0 0 0.75rem; font-size:0.9rem;">📊 Trade Data</h4>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Entry Price</label>
+          <input type="number" step="0.01" id="edit-entry-price" class="input" value="${trade.entryPrice || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Exit Price</label>
+          <input type="number" step="0.01" id="edit-exit-price" class="input" value="${trade.exitPrice || ''}" placeholder="Leave empty if active" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Size</label>
+          <input type="number" step="0.0001" id="edit-size" class="input" value="${trade.size || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fee</label>
+          <input type="number" step="0.01" id="edit-fee" class="input" value="${trade.fee || 0}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data Închidere</label>
+          <input type="datetime-local" id="edit-exit-time" class="input" value="${trade.exitTime ? toLocalDatetime(trade.exitTime) : ''}" />
+        </div>
+      </div>
+
+      <!-- Auto-calc P&L display -->
+      <div id="pnl-preview" style="padding:0.75rem; background:var(--bg-surface); border-radius:var(--radius-md); margin-bottom:1rem;">
+        <span class="form-label" style="font-size:0.7rem;">CALCULATED P&L</span>
+        <strong id="pnl-value" style="margin-left:0.5rem;">—</strong>
       </div>
 
       <hr style="border-color: var(--border-subtle); margin: 1rem 0;" />
@@ -229,12 +168,6 @@ export function openTradeEditor(trade, modalOverlay, modalContainer, onSave, onD
   `;
   }
 
-  // State
-  let currentRisk = trade.risk || 0;
-  let currentTags = [...(trade.tags || [])];
-  let currentImages = [...(trade.images || [])];
-  let newImageFiles = [];
-
   // Initial render
   renderEditor();
   modalOverlay.classList.remove('hidden');
@@ -242,8 +175,32 @@ export function openTradeEditor(trade, modalOverlay, modalContainer, onSave, onD
   // Load existing images
   loadExistingImages(currentImages);
 
+  // Update P&L preview
+  updatePnlPreview();
+
   // --- Bind Events ---
   bindEvents();
+
+  function updatePnlPreview() {
+    const entryPrice = parseFloat(modalContainer.querySelector('#edit-entry-price')?.value) || 0;
+    const exitPrice = parseFloat(modalContainer.querySelector('#edit-exit-price')?.value) || 0;
+    const size = parseFloat(modalContainer.querySelector('#edit-size')?.value) || 0;
+    const fee = parseFloat(modalContainer.querySelector('#edit-fee')?.value) || 0;
+    const dir = modalContainer.querySelector('#edit-direction')?.value || 'Long';
+    const el = modalContainer.querySelector('#pnl-value');
+    if (!el) return;
+
+    if (exitPrice > 0 && entryPrice > 0 && size > 0) {
+      const pnl = dir === 'Long'
+        ? (exitPrice - entryPrice) * size - fee
+        : (entryPrice - exitPrice) * size - fee;
+      el.style.color = pnl >= 0 ? 'var(--color-profit)' : 'var(--color-loss)';
+      el.textContent = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2);
+    } else {
+      el.style.color = 'var(--text-muted)';
+      el.textContent = '—';
+    }
+  }
 
   function bindEvents() {
     const closeModal = () => { modalOverlay.classList.add('hidden'); };
@@ -259,48 +216,10 @@ export function openTradeEditor(trade, modalOverlay, modalContainer, onSave, onD
       }
     });
 
-    // Add Entry leg
-    modalContainer.querySelector('#btn-add-entry')?.addEventListener('click', () => {
-      const computed = computeFromLegs(currentLegs);
-      const lastEntry = currentLegs.filter(l => l.type === 'entry').at(-1);
-      const newLeg = {
-        type: 'entry',
-        time: new Date().toISOString(),
-        price: lastEntry?.price || 0,
-        size: 0,
-        fee: 0,
-      };
-      showLegPrompt('entry', newLeg, computed);
-    });
-
-    // Add Exit leg
-    modalContainer.querySelector('#btn-add-exit')?.addEventListener('click', () => {
-      const computed = computeFromLegs(currentLegs);
-      if (computed.remainingSize <= 0) return;
-      const newLeg = {
-        type: 'exit',
-        time: new Date().toISOString(),
-        price: 0,
-        size: computed.remainingSize,
-        fee: 0,
-        pnl: 0,
-      };
-      showLegPrompt('exit', newLeg, computed);
-    });
-
-    // Remove leg
-    modalContainer.querySelectorAll('.leg-remove').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const type = btn.dataset.type;
-        const idx = parseInt(btn.dataset.idx);
-        const legs = currentLegs.filter(l => l.type === type);
-        const legToRemove = legs[idx];
-        if (legToRemove) {
-          currentLegs = currentLegs.filter(l => l !== legToRemove);
-          currentLegs = recalcLegsPnl(currentLegs, modalContainer.querySelector('#edit-direction').value);
-          refreshLegs();
-        }
-      });
+    // Auto-calc P&L on input change
+    ['#edit-entry-price', '#edit-exit-price', '#edit-size', '#edit-fee', '#edit-direction'].forEach(sel => {
+      modalContainer.querySelector(sel)?.addEventListener('input', updatePnlPreview);
+      modalContainer.querySelector(sel)?.addEventListener('change', updatePnlPreview);
     });
 
     // Risk stars
@@ -366,17 +285,34 @@ export function openTradeEditor(trade, modalOverlay, modalContainer, onSave, onD
       }
 
       const dir = modalContainer.querySelector('#edit-direction').value;
-      const finalLegs = recalcLegsPnl(currentLegs, dir);
-      const computed = computeFromLegs(finalLegs);
+      const entryPrice = parseFloat(modalContainer.querySelector('#edit-entry-price').value) || 0;
+      const exitPriceVal = modalContainer.querySelector('#edit-exit-price').value;
+      const exitPrice = exitPriceVal && parseFloat(exitPriceVal) > 0 ? parseFloat(exitPriceVal) : null;
+      const size = parseFloat(modalContainer.querySelector('#edit-size').value) || 0;
+      const fee = parseFloat(modalContainer.querySelector('#edit-fee').value) || 0;
       const timeVal = modalContainer.querySelector('#edit-time').value;
+      const exitTimeVal = modalContainer.querySelector('#edit-exit-time').value;
+
+      // Compute P&L
+      let closedPnl = 0;
+      if (exitPrice && entryPrice && size) {
+        closedPnl = dir === 'Long'
+          ? (exitPrice - entryPrice) * size - fee
+          : (entryPrice - exitPrice) * size - fee;
+      }
 
       const updatedData = {
         time: timeVal ? new Date(timeVal).toISOString() : trade.time,
+        exitTime: exitPrice ? (exitTimeVal ? new Date(exitTimeVal).toISOString() : trade.exitTime || new Date().toISOString()) : null,
         coin: (modalContainer.querySelector('#edit-coin').value || trade.coin).toUpperCase(),
         direction: dir,
-        legs: finalLegs,
-        ...computed,
-        exitTime: computed.status === 'Completed' ? (trade.exitTime || new Date().toISOString()) : null,
+        entryPrice,
+        exitPrice,
+        size,
+        notional: entryPrice * size,
+        fee,
+        closedPnl,
+        status: exitPrice ? 'Completed' : 'Active',
         risk: currentRisk,
         strategy: modalContainer.querySelector('#edit-strategy').value,
         notes: modalContainer.querySelector('#edit-notes').value,
@@ -389,159 +325,6 @@ export function openTradeEditor(trade, modalOverlay, modalContainer, onSave, onD
       onSave(trade.id, updatedData);
       modalOverlay.classList.add('hidden');
     });
-  }
-
-  function showLegPrompt(type, defaultLeg, computed) {
-    const maxSize = type === 'exit' ? computed.remainingSize : 999999;
-    const label = type === 'entry' ? 'Entry' : 'Exit';
-    const strategies = loadStrategies();
-    const overlay = document.createElement('div');
-    overlay.className = 'leg-prompt-overlay';
-    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:500; display:flex; align-items:center; justify-content:center;';
-    overlay.innerHTML = `
-      <div style="background:var(--bg-card); border-radius:var(--radius-lg); padding:1.5rem; width:400px; max-width:90vw; border:1px solid var(--border-medium); max-height:90vh; overflow-y:auto;">
-        <h4 style="margin:0 0 1rem; font-size:1rem;">➕ Add ${label}</h4>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.75rem;">
-          <div class="form-group">
-            <label class="form-label">Price</label>
-            <input type="number" step="0.01" class="input" id="leg-price" value="${defaultLeg.price || ''}" placeholder="Price ${label.toLowerCase()}" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Size ${type === 'exit' ? `(max: ${maxSize})` : ''}</label>
-            <input type="number" step="0.0001" class="input" id="leg-size" value="${defaultLeg.size || ''}" placeholder="Cantitate" />
-          </div>
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.75rem;">
-          <div class="form-group">
-            <label class="form-label">Fee</label>
-            <input type="number" step="0.01" class="input" id="leg-fee" value="0" placeholder="0.00" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Data & Ora</label>
-            <input type="datetime-local" class="input" id="leg-time" value="${toLocalDatetime(defaultLeg.time)}" />
-          </div>
-        </div>
-        <hr style="border-color:var(--border-subtle); margin:0.75rem 0;" />
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.75rem;">
-          <div class="form-group">
-            <label class="form-label">Strategy</label>
-            <select class="input" id="leg-strategy">
-              <option value="">— Selectează —</option>
-              ${strategies.map(s => `<option value="${s}">${s}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Risk</label>
-            <div id="leg-risk-selector" style="display:flex; gap:0.15rem; padding-top:0.3rem;">
-              ${[1, 2, 3, 4, 5].map(i => `
-                <button class="leg-risk-btn" data-risk="${i}" style="
-                  background:none; border:none; font-size:1.2rem; cursor:pointer; padding:0;
-                  color:#374151; transition:color 150ms ease;
-                ">★</button>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:1rem;">
-          <label class="form-label">Notes</label>
-          <textarea class="input" id="leg-notes" rows="2" placeholder="Observații pentru acest leg..." style="resize:vertical;"></textarea>
-        </div>
-        <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
-          <button class="btn btn-ghost" id="leg-cancel">Cancel</button>
-          <button class="btn btn-primary" id="leg-confirm">✓ Add</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    // Risk stars logic
-    let legRisk = 0;
-    overlay.querySelectorAll('.leg-risk-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        legRisk = parseInt(btn.dataset.risk);
-        overlay.querySelectorAll('.leg-risk-btn').forEach(b => {
-          b.style.color = parseInt(b.dataset.risk) <= legRisk ? '#f59e0b' : '#374151';
-        });
-      });
-    });
-
-    overlay.querySelector('#leg-cancel').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-
-    overlay.querySelector('#leg-confirm').addEventListener('click', () => {
-      const price = parseFloat(overlay.querySelector('#leg-price').value);
-      const size = parseFloat(overlay.querySelector('#leg-size').value);
-      const fee = parseFloat(overlay.querySelector('#leg-fee').value) || 0;
-      const timeVal = overlay.querySelector('#leg-time').value;
-      const strategy = overlay.querySelector('#leg-strategy').value;
-      const notes = overlay.querySelector('#leg-notes').value;
-
-      if (!price || price <= 0 || !size || size <= 0) {
-        alert('Invalid price or size.');
-        return;
-      }
-      if (type === 'exit' && size > maxSize + 0.00001) {
-        alert(`Size-ul maxim de exit este ${maxSize}`);
-        return;
-      }
-
-      const leg = {
-        type,
-        time: timeVal ? new Date(timeVal).toISOString() : new Date().toISOString(),
-        price,
-        size: Math.min(size, type === 'exit' ? maxSize : size),
-        fee,
-        strategy,
-        risk: legRisk,
-        notes,
-        tags: [],
-        images: [],
-      };
-
-      if (type === 'exit') {
-        const dir = modalContainer.querySelector('#edit-direction').value;
-        const avgEntry = computed.entryPrice;
-        leg.pnl = dir === 'Long'
-          ? (price - avgEntry) * leg.size - fee
-          : (avgEntry - price) * leg.size - fee;
-      }
-
-      currentLegs.push(leg);
-      currentLegs = recalcLegsPnl(currentLegs, modalContainer.querySelector('#edit-direction').value);
-      overlay.remove();
-      refreshLegs();
-    });
-  }
-
-  function refreshLegs() {
-    const container = modalContainer.querySelector('#legs-container');
-    if (container) {
-      container.innerHTML = renderLegsSection();
-      // Rebind leg events
-      container.querySelector('#btn-add-entry')?.addEventListener('click', () => {
-        const computed = computeFromLegs(currentLegs);
-        const lastEntry = currentLegs.filter(l => l.type === 'entry').at(-1);
-        showLegPrompt('entry', { type: 'entry', time: new Date().toISOString(), price: lastEntry?.price || 0, size: 0, fee: 0 }, computed);
-      });
-      container.querySelector('#btn-add-exit')?.addEventListener('click', () => {
-        const computed = computeFromLegs(currentLegs);
-        if (computed.remainingSize <= 0) return;
-        showLegPrompt('exit', { type: 'exit', time: new Date().toISOString(), price: 0, size: computed.remainingSize, fee: 0, pnl: 0 }, computed);
-      });
-      container.querySelectorAll('.leg-remove').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const type = btn.dataset.type;
-          const idx = parseInt(btn.dataset.idx);
-          const legs = currentLegs.filter(l => l.type === type);
-          const legToRemove = legs[idx];
-          if (legToRemove) {
-            currentLegs = currentLegs.filter(l => l !== legToRemove);
-            currentLegs = recalcLegsPnl(currentLegs, modalContainer.querySelector('#edit-direction').value);
-            refreshLegs();
-          }
-        });
-      });
-    }
   }
 
   async function loadExistingImages(imageIds) {
@@ -564,9 +347,7 @@ export function openTradeEditor(trade, modalOverlay, modalContainer, onSave, onD
       <button class="gallery-item-remove" style="position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--color-loss); color:white; border:none; cursor:pointer; font-size:0.7rem; display:flex; align-items:center; justify-content:center;">✕</button>
     `;
     item.querySelector('img').addEventListener('click', () => {
-      const lb = document.getElementById('lightbox');
-      document.getElementById('lightbox-img').src = dataUrl;
-      lb.classList.remove('hidden');
+      if (window.openLightbox) window.openLightbox([dataUrl], 0);
     });
     item.querySelector('.gallery-item-remove').addEventListener('click', (e) => {
       e.stopPropagation();

@@ -2,7 +2,7 @@
 import './style.css';
 import { loadTrades, saveTrades, loadStrategies, exportAll, importAll, syncToCloud, syncFromCloud, setCurrentUser, getCurrentUser } from './storage.js';
 import { loginWithGoogle, logout, onAuth } from './firebase.js';
-import { mergeTrades, migrateTrades, autoMergeTrades, recalcLegsPnl, computeFromLegs } from './csvParser.js';
+import { mergeTrades, migrateTrades } from './csvParser.js';
 import { equityCurve, dailyPnl, pnlByCoin, pnlByStrategy, maeMfeData } from './analytics.js';
 import { renderDashboard } from './components/dashboard.js';
 import { renderTradeTable } from './components/tradeTable.js';
@@ -46,15 +46,35 @@ document.querySelectorAll('.nav-link').forEach(link => {
     });
 });
 
-function navigateTo(page) {
+function navigateTo(page, pushHistory = true) {
     currentPage = page;
 
     // Update active nav
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
     document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
 
+    if (pushHistory) {
+        history.pushState({ page }, '', `#${page}`);
+    }
+
     renderCurrentPage();
 }
+
+// Browser back/forward button
+window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.page === 'trade-detail' && e.state.tradeId) {
+        const trade = trades.find(t => t.id === e.state.tradeId);
+        if (trade) handleEditTrade(trade, false);
+        else navigateTo('trades', false);
+    } else if (e.state && e.state.page) {
+        navigateTo(e.state.page, false);
+    } else {
+        navigateTo('dashboard', false);
+    }
+});
+
+// Set initial state
+history.replaceState({ page: currentPage }, '', `#${currentPage}`);
 
 function renderCurrentPage() {
     if (!getCurrentUser()) {
@@ -92,10 +112,13 @@ function renderCurrentPage() {
 }
 
 // --- Trade Actions ---
-function handleEditTrade(trade) {
+function handleEditTrade(trade, pushHistory = true) {
+    if (pushHistory) {
+        history.pushState({ page: 'trade-detail', tradeId: trade.id }, '', `#trade/${trade.id}`);
+    }
     renderPositionDetail(trade, mainContent,
         // onBack
-        () => { navigateTo('trades'); },
+        () => { history.back(); },
         // onUpdate
         (tradeId, updatedData) => {
             trades = trades.map(t => t.id === tradeId ? { ...t, ...updatedData } : t);
@@ -116,26 +139,7 @@ function handleImportCSV(newTrades) {
 }
 
 function handleAddManualTrade(newTrade) {
-    // Check if position already exists for this coin + direction
-    const existingIdx = trades.findIndex(t =>
-        t.coin === newTrade.coin && t.direction === newTrade.direction
-    );
-
-    if (existingIdx !== -1) {
-        // Merge: add new trade's legs into existing position
-        const existing = trades[existingIdx];
-        const mergedLegs = [...(existing.legs || []), ...(newTrade.legs || [])];
-        const finalLegs = recalcLegsPnl(mergedLegs, existing.direction);
-        const computed = computeFromLegs(finalLegs);
-        trades[existingIdx] = {
-            ...existing,
-            legs: finalLegs,
-            ...computed,
-            exitTime: computed.status === 'Completed' ? new Date().toISOString() : null,
-        };
-    } else {
-        trades.push(newTrade);
-    }
+    trades.push(newTrade);
     saveAndSync(trades);
     renderCurrentPage();
 }
@@ -188,7 +192,31 @@ document.getElementById('btn-import-data').addEventListener('click', () => {
     input.click();
 });
 
-// --- Lightbox ---
+// --- Lightbox Gallery ---
+let lightboxImages = [];
+let lightboxIndex = 0;
+
+function showLightboxImage() {
+    const lb = document.getElementById('lightbox');
+    const img = document.getElementById('lightbox-img');
+    const counter = document.getElementById('lightbox-counter');
+    const prev = document.getElementById('lightbox-prev');
+    const next = document.getElementById('lightbox-next');
+
+    img.src = lightboxImages[lightboxIndex];
+    counter.textContent = lightboxImages.length > 1 ? `${lightboxIndex + 1} / ${lightboxImages.length}` : '';
+    prev.style.display = lightboxImages.length > 1 ? 'flex' : 'none';
+    next.style.display = lightboxImages.length > 1 ? 'flex' : 'none';
+    lb.classList.remove('hidden');
+}
+
+// Global function for components to call
+window.openLightbox = function (imageUrls, startIndex = 0) {
+    lightboxImages = imageUrls;
+    lightboxIndex = startIndex;
+    showLightboxImage();
+};
+
 document.getElementById('lightbox-close').addEventListener('click', () => {
     document.getElementById('lightbox').classList.add('hidden');
 });
@@ -196,6 +224,23 @@ document.getElementById('lightbox').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) {
         e.currentTarget.classList.add('hidden');
     }
+});
+document.getElementById('lightbox-prev').addEventListener('click', (e) => {
+    e.stopPropagation();
+    lightboxIndex = (lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length;
+    showLightboxImage();
+});
+document.getElementById('lightbox-next').addEventListener('click', (e) => {
+    e.stopPropagation();
+    lightboxIndex = (lightboxIndex + 1) % lightboxImages.length;
+    showLightboxImage();
+});
+document.addEventListener('keydown', (e) => {
+    const lb = document.getElementById('lightbox');
+    if (lb.classList.contains('hidden')) return;
+    if (e.key === 'ArrowLeft') { lightboxIndex = (lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length; showLightboxImage(); }
+    if (e.key === 'ArrowRight') { lightboxIndex = (lightboxIndex + 1) % lightboxImages.length; showLightboxImage(); }
+    if (e.key === 'Escape') { lb.classList.add('hidden'); }
 });
 
 // --- Mobile Menu ---
@@ -264,7 +309,7 @@ onAuth(async (user) => {
         try {
             const hasCloudData = await syncFromCloud();
             if (hasCloudData) {
-                trades = autoMergeTrades(migrateTrades(loadTrades()));
+                trades = migrateTrades(loadTrades());
                 renderCurrentPage();
                 syncStatus.textContent = `☁️ ${trades.length} trades synced`;
             } else {

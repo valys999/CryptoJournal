@@ -2,7 +2,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 
 const firebaseConfig = {
     apiKey: "AIzaSyAJMG0ma7PWBytkea1Vj2cwmdSJm42GFkE",
@@ -16,7 +15,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -47,29 +45,40 @@ export async function loadUserData(uid) {
     return snap.exists() ? snap.data() : null;
 }
 
-// --- Cloud Storage helpers (abstraction layer) ---
-// To switch to Cloudinary later, replace only these 3 functions
+// --- Cloud Image Storage (Cloudinary) ---
+// To switch provider, replace only these 3 functions
+const CLOUDINARY_CLOUD_NAME = 'ddznvepev';
+const CLOUDINARY_UPLOAD_PRESET = 'cj_unsigned'; // Create this in Cloudinary Settings → Upload Presets
 
 export async function uploadImageCloud(uid, imageId, dataUrl) {
-    const imageRef = ref(storage, `users/${uid}/images/${imageId}`);
-    await uploadString(imageRef, dataUrl, 'data_url');
-    return await getDownloadURL(imageRef);
+    const formData = new FormData();
+    formData.append('file', dataUrl);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    formData.append('public_id', `${uid}/${imageId}`);
+    formData.append('folder', 'cryptojournal');
+
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData
+    });
+    if (!res.ok) throw new Error(`Cloudinary upload failed: ${res.status}`);
+    const data = await res.json();
+    return data.secure_url;
 }
 
 export async function downloadImageCloud(uid, imageId) {
+    // Cloudinary CDN URL — auto-format and auto-quality for optimal delivery
+    const url = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto/cryptojournal/${uid}/${imageId}`;
     try {
-        const imageRef = ref(storage, `users/${uid}/images/${imageId}`);
-        return await getDownloadURL(imageRef);
+        const res = await fetch(url, { method: 'HEAD' });
+        return res.ok ? url : null;
     } catch {
         return null;
     }
 }
 
 export async function deleteImageCloud(uid, imageId) {
-    try {
-        const imageRef = ref(storage, `users/${uid}/images/${imageId}`);
-        await deleteObject(imageRef);
-    } catch {
-        // Image may not exist in cloud, ignore
-    }
+    // Unsigned uploads can't delete — image stays in Cloudinary
+    // Clean up manually from Cloudinary dashboard if needed
+    console.log(`[IMG] Cloud delete skipped (unsigned): ${imageId}`);
 }

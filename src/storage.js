@@ -118,14 +118,11 @@ export async function saveImage(id, dataUrl) {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });
-    // Also upload to cloud (non-blocking)
+    // Upload to cloud in background (fire-and-forget)
     if (_currentUid) {
-        try {
-            await uploadImageCloud(_currentUid, id, dataUrl);
-            console.log(`[IMG] Uploaded to cloud: ${id}`);
-        } catch (err) {
-            console.warn(`[IMG] Cloud upload failed for ${id}:`, err.message);
-        }
+        uploadImageCloud(_currentUid, id, dataUrl)
+            .then(() => console.log(`[IMG] Uploaded to cloud: ${id}`))
+            .catch(err => console.warn(`[IMG] Cloud upload failed for ${id}:`, err.message));
     }
 }
 
@@ -164,14 +161,11 @@ export async function deleteImage(id) {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });
-    // Also delete from cloud (non-blocking)
+    // Delete from cloud in background (fire-and-forget)
     if (_currentUid) {
-        try {
-            await deleteImageCloud(_currentUid, id);
-            console.log(`[IMG] Deleted from cloud: ${id}`);
-        } catch (err) {
-            console.warn(`[IMG] Cloud delete failed for ${id}:`, err.message);
-        }
+        deleteImageCloud(_currentUid, id)
+            .then(() => console.log(`[IMG] Deleted from cloud: ${id}`))
+            .catch(err => console.warn(`[IMG] Cloud delete failed for ${id}:`, err.message));
     }
 }
 

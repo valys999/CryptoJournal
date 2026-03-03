@@ -109,14 +109,52 @@ function openDB() {
     });
 }
 
+// Compress image: resize to max dimensions + JPEG quality
+const MAX_IMG_WIDTH = 1200;
+const MAX_IMG_HEIGHT = 1200;
+const JPEG_QUALITY = 0.5;
+
+function compressImage(dataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+
+            // Scale down if exceeds max dimensions
+            if (width > MAX_IMG_WIDTH || height > MAX_IMG_HEIGHT) {
+                const ratio = Math.min(MAX_IMG_WIDTH / width, MAX_IMG_HEIGHT / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const compressed = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+            const originalKB = Math.round(dataUrl.length * 3 / 4 / 1024);
+            const compressedKB = Math.round(compressed.length * 3 / 4 / 1024);
+            console.log(`[IMG] Compressed: ${originalKB}KB → ${compressedKB}KB (${Math.round((1 - compressedKB / originalKB) * 100)}% saved)`);
+            resolve(compressed);
+        };
+        img.onerror = () => resolve(dataUrl); // fallback to original on error
+        img.src = dataUrl;
+    });
+}
+
 export async function saveImage(id, dataUrl) {
     const db = await openDB();
+
+    // Compress before saving/uploading
+    const compressed = await compressImage(dataUrl);
 
     // Upload to cloud first (if logged in) to get the URL
     let cloudUrl = null;
     if (_currentUid) {
         try {
-            cloudUrl = await uploadImageCloud(_currentUid, id, dataUrl);
+            cloudUrl = await uploadImageCloud(_currentUid, id, compressed);
             console.log(`[IMG] Uploaded to cloud: ${id} → ${cloudUrl}`);
         } catch (err) {
             console.error(`[IMG] Cloud upload FAILED for ${id}:`, err.message);
@@ -126,7 +164,7 @@ export async function saveImage(id, dataUrl) {
     // Save locally (IndexedDB cache) with cloud URL if available
     await new Promise((resolve, reject) => {
         const tx = db.transaction(IMG_STORE, 'readwrite');
-        tx.objectStore(IMG_STORE).put({ id, dataUrl, cloudUrl });
+        tx.objectStore(IMG_STORE).put({ id, dataUrl: compressed, cloudUrl });
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });

@@ -1,6 +1,6 @@
 // Main entry point — app initialization, routing, event handling
 import './style.css';
-import { loadTrades, saveTrades, loadStrategies, exportAll, importAll, syncToCloud, syncFromCloud, setCurrentUser, getCurrentUser } from './storage.js';
+import { loadTrades, saveTrades, loadStrategies, exportAll, importAll, syncToCloud, syncFromCloud, syncImages, setCurrentUser, getCurrentUser } from './storage.js';
 import { loginWithGoogle, logout, onAuth } from './firebase.js';
 import { mergeTrades, migrateTrades } from './csvParser.js';
 import { equityCurve, dailyPnl, pnlByCoin, pnlByStrategy, maeMfeData } from './analytics.js';
@@ -317,6 +317,8 @@ onAuth(async (user) => {
                 await syncToCloud();
                 syncStatus.textContent = `☁️ ${trades.length} trades synced`;
             }
+            // Upload any local images that don't have a cloud URL yet
+            syncImages().catch(err => console.warn('[IMG] Background sync failed:', err));
         } catch (err) {
             console.error('[SYNC] Error:', err);
             syncStatus.textContent = '⚠️ Sync error';

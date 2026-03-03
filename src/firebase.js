@@ -51,23 +51,31 @@ const CLOUDINARY_CLOUD_NAME = 'ddznvepev';
 const CLOUDINARY_UPLOAD_PRESET = 'cj_unsigned'; // Create this in Cloudinary Settings → Upload Presets
 
 export async function uploadImageCloud(uid, imageId, dataUrl) {
+    // Use folder-based path: cryptojournal/{uid}/{imageId}
+    const publicId = `cryptojournal/${uid}/${imageId}`;
+
     const formData = new FormData();
     formData.append('file', dataUrl);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    formData.append('public_id', `${uid}/${imageId}`);
-    formData.append('folder', 'cryptojournal');
+    formData.append('public_id', publicId);
 
     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
         method: 'POST',
         body: formData
     });
-    if (!res.ok) throw new Error(`Cloudinary upload failed: ${res.status}`);
+
+    if (!res.ok) {
+        const errorBody = await res.text().catch(() => '(no body)');
+        throw new Error(`Cloudinary upload failed: ${res.status} — ${errorBody}`);
+    }
+
     const data = await res.json();
+    console.log(`[IMG] Cloudinary response:`, { public_id: data.public_id, secure_url: data.secure_url });
     return data.secure_url;
 }
 
 export async function downloadImageCloud(uid, imageId) {
-    // Return Cloudinary CDN URL directly — auto-format and auto-quality
+    // Return Cloudinary CDN URL — matches the public_id used during upload
     return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto/cryptojournal/${uid}/${imageId}`;
 }
 

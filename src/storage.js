@@ -110,20 +110,26 @@ function openDB() {
 }
 
 export async function saveImage(id, dataUrl) {
-    // Save locally (IndexedDB cache)
     const db = await openDB();
+
+    // Upload to cloud first (if logged in) to get the URL
+    let cloudUrl = null;
+    if (_currentUid) {
+        try {
+            cloudUrl = await uploadImageCloud(_currentUid, id, dataUrl);
+            console.log(`[IMG] Uploaded to cloud: ${id} → ${cloudUrl}`);
+        } catch (err) {
+            console.error(`[IMG] Cloud upload FAILED for ${id}:`, err.message);
+        }
+    }
+
+    // Save locally (IndexedDB cache) with cloud URL if available
     await new Promise((resolve, reject) => {
         const tx = db.transaction(IMG_STORE, 'readwrite');
-        tx.objectStore(IMG_STORE).put({ id, dataUrl });
+        tx.objectStore(IMG_STORE).put({ id, dataUrl, cloudUrl });
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });
-    // Upload to cloud in background (fire-and-forget)
-    if (_currentUid) {
-        uploadImageCloud(_currentUid, id, dataUrl)
-            .then(() => console.log(`[IMG] Uploaded to cloud: ${id}`))
-            .catch(err => console.warn(`[IMG] Cloud upload failed for ${id}:`, err.message));
-    }
 }
 
 export async function loadImage(id) {
@@ -132,12 +138,15 @@ export async function loadImage(id) {
     const localResult = await new Promise((resolve, reject) => {
         const tx = db.transaction(IMG_STORE, 'readonly');
         const req = tx.objectStore(IMG_STORE).get(id);
-        req.onsuccess = () => resolve(req.result?.dataUrl || null);
+        req.onsuccess = () => resolve(req.result || null);
         req.onerror = () => reject(req.error);
     });
-    if (localResult) return localResult;
 
-    // Fall back to cloud
+    // If we have local data, use it (prefer dataUrl for quality, cloudUrl as backup)
+    if (localResult?.dataUrl) return localResult.dataUrl;
+    if (localResult?.cloudUrl) return localResult.cloudUrl;
+
+    // Fall back to cloud (other device scenario — no local data)
     if (_currentUid) {
         try {
             const cloudUrl = await downloadImageCloud(_currentUid, id);
@@ -177,6 +186,34 @@ export async function getAllImages() {
         req.onsuccess = () => resolve(req.result || []);
         req.onerror = () => reject(req.error);
     });
+}
+
+// Sync any local images that don't have a cloud URL yet
+export async function syncImages() {
+    if (!_currentUid) return;
+    const images = await getAllImages();
+    const pending = images.filter(img => img.dataUrl && !img.cloudUrl);
+    if (pending.length === 0) {
+        console.log('[IMG] All images already synced to cloud');
+        return;
+    }
+    console.log(`[IMG] Syncing ${pending.length} images to cloud...`);
+    const db = await openDB();
+    for (const img of pending) {
+        try {
+            const cloudUrl = await uploadImageCloud(_currentUid, img.id, img.dataUrl);
+            // Update local record with the cloud URL
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction(IMG_STORE, 'readwrite');
+                tx.objectStore(IMG_STORE).put({ ...img, cloudUrl });
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+            console.log(`[IMG] Synced: ${img.id}`);
+        } catch (err) {
+            console.error(`[IMG] Sync failed for ${img.id}:`, err.message);
+        }
+    }
 }
 
 // --- Full export/import ---
